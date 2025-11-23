@@ -643,20 +643,20 @@ def get_predictions_and_mitigation(request):
     except ValueError:
         return JsonResponse({'error': 'Invalid latitude or longitude'}, status=400)
 
-
     industry_type = identify_industry(industry, location)
-
 
     openweather_api_key = settings.OPENWEATHERAPI_KEY
 
     final_df1 = fetch_data_for_3_months(latitude, longitude, openweather_api_key)
+    
     # Anomaly Detection
-    anomaly_df = perform_anomaly_detection(final_df1.copy()) # Pass a copy to avoid modifying original df
+    anomaly_df = perform_anomaly_detection(final_df1.copy())
 
     # Clustering
     kmeans, scaler, pca, industry_summary = load_clustering_model(industry_type)
     clustering_results = perform_clustering(kmeans, scaler, pca, industry_summary, final_df1.copy())
-    pca_coords, cluster_stats, industry_stats, industry_daily_mean, industry_24hr_mean, exceeding, avg_cluster_pollution, new_avg = clustering_results
+    # UNPACK THE PREDICTED_CLUSTER FROM THE RESULTS
+    pca_coords, cluster_stats, industry_stats, industry_daily_mean, industry_24hr_mean, exceeding, avg_cluster_pollution, new_avg, predicted_cluster = clustering_results
 
     # LSTM
     model = load_lstm_model(industry_type)
@@ -664,6 +664,7 @@ def get_predictions_and_mitigation(request):
     future_preds, future_timestamps, y_test, y_pred, test_timestamps, targets_lstm = lstm_results
 
     print(f"Model loaded for industry: {industry}")
+    
     # Fetch current air pollution data for mitigation strategies
     current_air_pollution_response = requests.get(
         f'http://api.openweathermap.org/data/2.5/air_pollution?lat={latitude}&lon={longitude}&appid={settings.OPENWEATHERAPI_KEY}'
@@ -685,16 +686,27 @@ def get_predictions_and_mitigation(request):
     mitigation_strategies = mitigation_stratergies(industry, location, str(predicted_air_quality_str), str(current_air_quality_str), current_date_str)
     print(mitigation_strategies)
 
+    # ADD CLUSTER NAME HELPER FUNCTION
+    def get_cluster_name(cluster_num):
+        cluster_names = {
+            0: "Medium Pollution",
+            1: "Low Pollution",
+            2: "High Pollution"
+        }
+        return cluster_names.get(cluster_num, "Unknown")
+
     response_data = {
         'latitude': latitude,
         'longitude': longitude,
         'displayName': industry,
+        'predicted_cluster': int(predicted_cluster),  # ADD THIS
+        'cluster_name': get_cluster_name(predicted_cluster),  # ADD THIS
         'targets': TARGETS,
         'mitigationStrategies': mitigation_strategies,
         'pca_coords': pca_coords.tolist(),
         'cluster_stats': cluster_stats.to_dict(),
         'industry_stats': industry_stats.to_dict(),
-        'industry_daily_mean': industry_daily_mean.to_list(), # Assuming this is a Series
+        'industry_daily_mean': industry_daily_mean.to_list(),
         'industry_24hr_mean': industry_24hr_mean.to_dict(),
         'exceeding_limits': exceeding,
         'average_cluster_pollution': avg_cluster_pollution.to_dict(),
@@ -778,6 +790,7 @@ def perform_clustering(kmeans, scaler, pca, industry_summary, new_data):
     scaled_new = scaler.transform(new_data[features])
     predicted_cluster = kmeans.predict(scaled_new)[0]
     pca_coords = pca.transform(scaled_new)[0]
+    
     # --- Pollution Stats ---
     print(f"\n🔷 New Industry is classified into Cluster {predicted_cluster}")
 
@@ -823,7 +836,7 @@ def perform_clustering(kmeans, scaler, pca, industry_summary, new_data):
     exceeding = []
     for pol, limit in cpcb_limits.items():
         val = industry_24hr_mean[pol]
-        print(pol,val)
+        print(pol, val)
         if val > limit:
             exceeding.append({'pollutant': pol.upper(), 'value': round(val, 2), 'limit': limit}) # Store as dictionary
 
@@ -845,7 +858,9 @@ def perform_clustering(kmeans, scaler, pca, industry_summary, new_data):
         print("⚠️ This industry is relatively harmful.")
     else:
         print("✅ This industry is within normal pollution levels.")
-    return pca_coords, cluster_stats, industry_stats, industry_daily_mean, industry_24hr_mean, exceeding, avg_cluster_pollution, new_avg
+    
+    # RETURN THE PREDICTED CLUSTER AS THE LAST ITEM IN THE TUPLE
+    return pca_coords, cluster_stats, industry_stats, industry_daily_mean, industry_24hr_mean, exceeding, avg_cluster_pollution, new_avg, predicted_cluster
 
 def perform_anomaly_detection(df):
     df = df.sort_values("timestamp").reset_index(drop=True)
@@ -917,7 +932,7 @@ def perform_lstm(model, df):
     df["so2"] = df["so2_corrected"]
 
     # Normalize features
-    print("is this this")
+    #print("is this this")
     scaler = MinMaxScaler()
     scaled_data = scaler.fit_transform(df[features])
     scaled_df = pd.DataFrame(scaled_data, columns=features)
