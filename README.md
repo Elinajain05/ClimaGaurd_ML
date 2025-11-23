@@ -1,6 +1,6 @@
 # ClimaGuard
 ## Overview
-<img width="1906" height="908" alt="image" src="<img width="1727" height="829" alt="image" src="https://github.com/user-attachments/assets/e7c0f714-1d21-4744-85bf-2680a5a42d88" />" />
+<img width="1906" height="908" alt="image" src="<img width="1727" height="829" alt="image" src="https://github.com/user-attachments/assets/e7c0f714-1d21-4744-85bf-2680a5a42d88" />
 ClimaGuard is a web application. It utilizes fusion data and machine learning to monitor, predict, and analyze environmental pollution — especially industrial air pollution — in real-time. The platform is designed to provide transparency, promote sustainable practices, and enable data-driven policy interventions.
 
 ## Project Goals
